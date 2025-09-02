@@ -72,7 +72,20 @@ const ModelViewer: React.FC = () => {
           const material = new THREE.MeshStandardMaterial({ color: 0xcccccc });
           const mesh = new THREE.Mesh(geometry, material);
           scene.add(mesh);
-          // (Camera positioning will be handled in a later story)
+          // Adjust camera to fit the loaded model
+          const box = new THREE.Box3().setFromObject(mesh);
+          const sphere = box.getBoundingSphere(new THREE.Sphere());
+          if (sphere) {
+            const center = sphere.center;
+            const radius = sphere.radius;
+            camera.position.set(center.x, center.y, center.z + radius * 2);
+            camera.lookAt(center);
+            if (camera instanceof THREE.PerspectiveCamera) {
+              camera.updateProjectionMatrix();
+            }
+            controls.target.copy(center);
+            controls.update();
+          }
         },
         undefined,
         (error) => {
@@ -85,7 +98,20 @@ const ModelViewer: React.FC = () => {
         modelUrl,
         (gltf) => {
           scene.add(gltf.scene);
-          // (Camera positioning will be handled in a later story)
+          // Adjust camera to fit the loaded model
+          const box = new THREE.Box3().setFromObject(gltf.scene);
+          const sphere = box.getBoundingSphere(new THREE.Sphere());
+          if (sphere) {
+            const center = sphere.center;
+            const radius = sphere.radius;
+            camera.position.set(center.x, center.y, center.z + radius * 2);
+            camera.lookAt(center);
+            if (camera instanceof THREE.PerspectiveCamera) {
+              camera.updateProjectionMatrix();
+            }
+            controls.target.copy(center);
+            controls.update();
+          }
         },
         undefined,
         (error) => {
@@ -107,10 +133,23 @@ const ModelViewer: React.FC = () => {
     };
     animate();
 
+    // Update camera and renderer on window resize
+    const onWindowResize = () => {
+      if (!containerRef.current) return;
+      const width = containerRef.current.clientWidth;
+      const height = containerRef.current.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    };
+
+    window.addEventListener('resize', onWindowResize);
+
     // Cleanup on unmount
     return () => {
       if (frameId) cancelAnimationFrame(frameId);
       renderer.dispose();
+      window.removeEventListener('resize', onWindowResize);
       if (container) {
         container.removeChild(renderer.domElement);
       }
