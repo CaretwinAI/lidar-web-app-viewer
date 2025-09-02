@@ -2,10 +2,16 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import './ModelViewer.css';
 
 const ModelViewer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const ModelViewerStyleObj = {
+    width: '100%',
+    height: '100%',
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -22,7 +28,25 @@ const ModelViewer: React.FC = () => {
     // Set up renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     containerRef.current.appendChild(renderer.domElement);
+
+    // on resize (you already have width/height reads elsewhere)
+    window.addEventListener('resize', () => {
+      if (!containerRef.current) return;
+      const w = containerRef.current.clientWidth;
+      const h = containerRef.current.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    // set up orbit controls for camera interaction
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    // controls.dampingFactor = 0.25;
+    // controls.screenSpacePanning = false;
+    // controls.maxPolarAngle = Math.PI / 2;
 
     // Add basic lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -78,6 +102,7 @@ const ModelViewer: React.FC = () => {
 
     const animate = () => {
       frameId = requestAnimationFrame(animate);
+      controls.update();
       renderer.render(scene, camera);
     };
     animate();
@@ -92,7 +117,13 @@ const ModelViewer: React.FC = () => {
     };
   }, []);
 
-  return <div ref={containerRef} className="model-viewer-container" />;
+  return (
+    <div
+      ref={containerRef}
+      className="model-viewer-container"
+      style={ModelViewerStyleObj}
+    />
+  );
 };
 
 export default ModelViewer;

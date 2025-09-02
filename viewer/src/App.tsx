@@ -2,11 +2,7 @@
 import ModelViewer from './components/ModelViewer';
 
 function App() {
-  return (
-    <div>
-      <ModelViewer />
-    </div>
-  );
+  return <ModelViewer />;
 }
 
 export default App;
