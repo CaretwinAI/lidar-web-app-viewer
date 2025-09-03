@@ -210,7 +210,17 @@ const ModelViewer: React.FC = () => {
 
   // Dismiss: send bridge message (if in WKWebView) then hide banner
   const handleDismiss = () => {
-    const viewerHandler = (window as any)?.webkit?.messageHandlers?.viewer;
+    const viewerHandler = (
+      window as Window & {
+        webkit?: {
+          messageHandlers?: {
+            viewer?: {
+              postMessage?: (msg: unknown) => void;
+            };
+          };
+        };
+      }
+    )?.webkit?.messageHandlers?.viewer;
     try {
       if (viewerHandler && typeof viewerHandler.postMessage === 'function') {
         viewerHandler.postMessage({
@@ -219,6 +229,7 @@ const ModelViewer: React.FC = () => {
           url: lastUrl || null,
         });
       }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (_) {
       // no-op: fail silently if not in WKWebView
     }
@@ -267,7 +278,10 @@ const ModelViewer: React.FC = () => {
             <>
               <div className="spinner-text">{label}%</div>
               <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${label}%` }} />
+                <div
+                  className="progress-fill"
+                  style={{ ['--progress-width' as string]: `${label}%` }}
+                />
               </div>
             </>
           )}
