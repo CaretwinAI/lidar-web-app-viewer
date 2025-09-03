@@ -9,7 +9,7 @@ const ModelViewer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<number | null>(null); // 0–100 while loading
-  // TODO: error state to be added
+  const [error, setError] = useState<string | null>(null);
 
   const ModelViewerStyleObj: React.CSSProperties = {
     width: '100%',
@@ -35,7 +35,7 @@ const ModelViewer: React.FC = () => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     containerRef.current.appendChild(renderer.domElement);
 
-    // on resize (you already have width/height reads elsewhere)
+    // on resize
     window.addEventListener('resize', () => {
       if (!containerRef.current) return;
       const w = containerRef.current.clientWidth;
@@ -48,9 +48,6 @@ const ModelViewer: React.FC = () => {
     // set up orbit controls for camera interaction
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    // controls.dampingFactor = 0.25;
-    // controls.screenSpacePanning = false;
-    // controls.maxPolarAngle = Math.PI / 2;
 
     // Add basic lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -63,24 +60,27 @@ const ModelViewer: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const modelUrl =
       params.get('fileUrl') ||
-      'https://raw.githubusercontent.com/kelvinwatson/glb-files/main/DamagedHelmet.glb';
+      'https://raw.githubusercontent.com/kelvinwatson/glb-files/main/DamagedHelmet2.glb';
     const ext = modelUrl.split('.').pop()?.toLowerCase();
 
-    setIsLoading(true); // show spinner immediately before any network requests
-    setProgress(0); // start progress at 0%
+    // reset error + show spinner
+    setError(null);
+    setIsLoading(true);
+    setProgress(0);
 
-    // Shared progress handler for both loaders
-    // Always produce a sane 0..99 value during load
+    // Shared progress handler for both loaders (produces 0..99 until success)
     const handleProgress = (e?: ProgressEvent<EventTarget>) => {
       let next: number | null = null;
       if (
         e &&
-        typeof e.loaded === 'number' &&
-        typeof e.total === 'number' &&
-        e.total > 0
+        'loaded' in e &&
+        'total' in e &&
+        typeof (e as ProgressEvent<EventTarget>).loaded === 'number' &&
+        typeof (e as ProgressEvent<EventTarget>).total === 'number' &&
+        (e as ProgressEvent<EventTarget>).total > 0
       ) {
-        const loaded = e.loaded;
-        const total = e.total;
+        const loaded = (e as ProgressEvent<EventTarget>).loaded;
+        const total = (e as ProgressEvent<EventTarget>).total;
         const pct = (loaded / total) * 100;
         if (Number.isFinite(pct)) next = Math.min(Math.round(pct), 99);
       }
@@ -123,10 +123,11 @@ const ModelViewer: React.FC = () => {
           }, 120);
         },
         handleProgress,
-        (error) => {
-          console.error('Error loading PLY model:', error);
+        (err) => {
+          console.error('Error loading PLY model:', err);
           setIsLoading(false);
           setProgress(null);
+          setError('Failed to load model (PLY). Please check the URL or file.');
         }
       );
     } else if (ext === 'gltf' || ext === 'glb') {
@@ -157,16 +158,20 @@ const ModelViewer: React.FC = () => {
           }, 100);
         },
         handleProgress,
-        (error) => {
-          console.error('Error loading GLTF model:', error);
+        (err) => {
+          console.error('Error loading GLTF model:', err);
           setIsLoading(false);
           setProgress(null);
+          setError(
+            'Failed to load model (GLB/GLTF). Please check the URL or file.'
+          );
         }
       );
     } else {
       console.error('Unsupported file extension:', ext);
       setIsLoading(false);
       setProgress(null);
+      setError(`Unsupported file type: ${ext ?? '(unknown)'}`);
     }
 
     // Animation loop (renders the scene on each frame)
@@ -189,7 +194,6 @@ const ModelViewer: React.FC = () => {
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
     };
-
     window.addEventListener('resize', onWindowResize);
 
     // Cleanup on unmount
@@ -216,6 +220,19 @@ const ModelViewer: React.FC = () => {
       className="model-viewer-container"
       style={ModelViewerStyleObj}
     >
+      {error && (
+        <div className="error-banner" role="alert">
+          <span className="error-banner__text">{error}</span>
+          <button
+            type="button"
+            className="error-banner__close"
+            aria-label="Dismiss error"
+            onClick={() => setError(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {isLoading && (
         <div className="spinner-overlay">
           <div className="spinner"></div>
