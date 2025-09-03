@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
@@ -7,10 +7,14 @@ import './ModelViewer.css';
 
 const ModelViewer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null); // 0–100 while loading
+  // TODO: error state to be added
 
-  const ModelViewerStyleObj = {
+  const ModelViewerStyleObj: React.CSSProperties = {
     width: '100%',
     height: '100%',
+    position: 'relative',
   };
 
   useEffect(() => {
@@ -62,6 +66,31 @@ const ModelViewer: React.FC = () => {
       'https://raw.githubusercontent.com/kelvinwatson/glb-files/main/DamagedHelmet.glb';
     const ext = modelUrl.split('.').pop()?.toLowerCase();
 
+    setIsLoading(true); // show spinner immediately before any network requests
+    setProgress(0); // start progress at 0%
+
+    // Shared progress handler for both loaders
+    // Always produce a sane 0..99 value during load
+    const handleProgress = (e?: ProgressEvent<EventTarget>) => {
+      let next: number | null = null;
+      if (
+        e &&
+        typeof e.loaded === 'number' &&
+        typeof e.total === 'number' &&
+        e.total > 0
+      ) {
+        const loaded = e.loaded;
+        const total = e.total;
+        const pct = (loaded / total) * 100;
+        if (Number.isFinite(pct)) next = Math.min(Math.round(pct), 99);
+      }
+      setProgress((prev) => {
+        if (next !== null) return next;
+        const fallback = prev == null ? 10 : Math.min(prev + 5, 95);
+        return Number.isFinite(fallback) ? fallback : 0;
+      });
+    };
+
     // Load model based on file extension
     if (ext === 'ply') {
       const plyLoader = new PLYLoader();
@@ -86,10 +115,18 @@ const ModelViewer: React.FC = () => {
             controls.target.copy(center);
             controls.update();
           }
+          setProgress(100);
+          // small delay so 100% is visible for a beat
+          setTimeout(() => {
+            setIsLoading(false);
+            setProgress(null);
+          }, 120);
         },
-        undefined,
+        handleProgress,
         (error) => {
           console.error('Error loading PLY model:', error);
+          setIsLoading(false);
+          setProgress(null);
         }
       );
     } else if (ext === 'gltf' || ext === 'glb') {
@@ -112,14 +149,24 @@ const ModelViewer: React.FC = () => {
             controls.target.copy(center);
             controls.update();
           }
+          setProgress(100);
+          // small delay so 100% is visible for a beat
+          setTimeout(() => {
+            setIsLoading(false);
+            setProgress(null);
+          }, 100);
         },
-        undefined,
+        handleProgress,
         (error) => {
           console.error('Error loading GLTF model:', error);
+          setIsLoading(false);
+          setProgress(null);
         }
       );
     } else {
       console.error('Unsupported file extension:', ext);
+      setIsLoading(false);
+      setProgress(null);
     }
 
     // Animation loop (renders the scene on each frame)
@@ -156,12 +203,33 @@ const ModelViewer: React.FC = () => {
     };
   }, []);
 
+  const label =
+    progress == null
+      ? null
+      : Number.isFinite(progress)
+      ? Math.round(progress)
+      : 0;
+
   return (
     <div
       ref={containerRef}
       className="model-viewer-container"
       style={ModelViewerStyleObj}
-    />
+    >
+      {isLoading && (
+        <div className="spinner-overlay">
+          <div className="spinner"></div>
+          {label != null && (
+            <>
+              <div className="spinner-text">{label}%</div>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${label}%` }} />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 
