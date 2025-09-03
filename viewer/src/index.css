@@ -12,3 +12,58 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+.spinner-overlay {
+  position: absolute;
+  inset: 0; /* shorthand for top/right/bottom/left:0 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px; /* consistent spacing between spinner, % label, bar */
+  padding: max(env(safe-area-inset-top), 0px)
+    max(env(safe-area-inset-right), 0px) max(env(safe-area-inset-bottom), 0px)
+    max(env(safe-area-inset-left), 0px);
+  background: rgba(255, 255, 255, 0.8);
+  z-index: 999;
+  pointer-events: none; /* don’t block orbit controls when overlay flashes 100% briefly */
+}
+
+.spinner-text {
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333333;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Optional progress bar */
+.progress-bar {
+  width: 200px;
+  height: 6px;
+  border-radius: 999px;
+  background: #e5e5e5;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: #333333;
+  width: 0%;
+  transition: width 120ms linear;
+}
+
+.spinner {
+  width: clamp(28px, 6vmin, 56px);
+  height: clamp(28px, 6vmin, 56px);
+  border: clamp(3px, 0.7vmin, 6px) solid #cccccc;
+  border-top: clamp(3px, 0.7vmin, 6px) solid #333333;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
