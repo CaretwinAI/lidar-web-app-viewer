@@ -10,6 +10,8 @@ const ModelViewer: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<number | null>(null); // 0–100 while loading
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0); // trigger re-run of loader
+  const [lastUrl, setLastUrl] = useState<string>('');
 
   const ModelViewerStyleObj: React.CSSProperties = {
     width: '100%',
@@ -36,14 +38,16 @@ const ModelViewer: React.FC = () => {
     containerRef.current.appendChild(renderer.domElement);
 
     // on resize
-    window.addEventListener('resize', () => {
+    const onWindowResize = () => {
       if (!containerRef.current) return;
       const w = containerRef.current.clientWidth;
       const h = containerRef.current.clientHeight;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
-    });
+    };
+
+    window.addEventListener('resize', onWindowResize);
 
     // set up orbit controls for camera interaction
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -60,8 +64,9 @@ const ModelViewer: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const modelUrl =
       params.get('fileUrl') ||
-      'https://raw.githubusercontent.com/kelvinwatson/glb-files/main/DamagedHelmet2.glb';
+      'https://raw.githubusercontent.com/kelvinwatson/glb-files/main/DamagedHelmet.glb';
     const ext = modelUrl.split('.').pop()?.toLowerCase();
+    setLastUrl(modelUrl);
 
     // reset error + show spinner
     setError(null);
@@ -185,17 +190,6 @@ const ModelViewer: React.FC = () => {
     };
     animate();
 
-    // Update camera and renderer on window resize
-    const onWindowResize = () => {
-      if (!containerRef.current) return;
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-    };
-    window.addEventListener('resize', onWindowResize);
-
     // Cleanup on unmount
     return () => {
       if (frameId) cancelAnimationFrame(frameId);
@@ -205,7 +199,31 @@ const ModelViewer: React.FC = () => {
         container.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [reloadKey]);
+
+  // Retry: re-run the effect by bumping the key
+
+  const handleRetry = () => {
+    setError(null);
+    setReloadKey((k) => k + 1);
+  };
+
+  // Dismiss: send bridge message (if in WKWebView) then hide banner
+  const handleDismiss = () => {
+    const viewerHandler = (window as any)?.webkit?.messageHandlers?.viewer;
+    try {
+      if (viewerHandler && typeof viewerHandler.postMessage === 'function') {
+        viewerHandler.postMessage({
+          type: 'viewerError',
+          error,
+          url: lastUrl || null,
+        });
+      }
+    } catch (_) {
+      // no-op: fail silently if not in WKWebView
+    }
+    setError(null);
+  };
 
   const label =
     progress == null
@@ -221,16 +239,25 @@ const ModelViewer: React.FC = () => {
       style={ModelViewerStyleObj}
     >
       {error && (
-        <div className="error-banner" role="alert">
+        <div className="error-banner" role="alert" aria-live="polite">
           <span className="error-banner__text">{error}</span>
-          <button
-            type="button"
-            className="error-banner__close"
-            aria-label="Dismiss error"
-            onClick={() => setError(null)}
-          >
-            ×
-          </button>
+          <div className="error-banner__actions">
+            <button
+              type="button"
+              className="error-banner__retry"
+              onClick={handleRetry}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              className="error-banner__close"
+              aria-label="Dismiss error"
+              onClick={handleDismiss}
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
       {isLoading && (
