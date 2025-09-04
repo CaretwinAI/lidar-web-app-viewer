@@ -8,10 +8,11 @@ import './ModelViewer.css';
 const ModelViewer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [progress, setProgress] = useState<number | null>(null); // 0–100 while loading
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0); // trigger re-run of loader
+  const [reloadKey, setReloadKey] = useState(0);
   const [lastUrl, setLastUrl] = useState<string>('');
+  const abortController = useRef<AbortController | null>(null);
 
   const ModelViewerStyleObj: React.CSSProperties = {
     width: '100%',
@@ -22,45 +23,39 @@ const ModelViewer: React.FC = () => {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Initialize Three.js scene
+    const container = containerRef.current; // Capture ref value
+
     const scene = new THREE.Scene();
 
-    // Set up camera
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
     camera.position.set(0, 0, 5);
 
-    // Set up renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
+    renderer.setSize(width, height, false);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.domElement.style.display = 'block'; // avoid inline-canvas baseline gaps
     containerRef.current.appendChild(renderer.domElement);
 
-    // on resize
     const onWindowResize = () => {
       if (!containerRef.current) return;
       const w = containerRef.current.clientWidth;
       const h = containerRef.current.clientHeight;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      renderer.setSize(w, h, false);
     };
-
     window.addEventListener('resize', onWindowResize);
 
-    // set up orbit controls for camera interaction
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
-    // Add basic lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(5, 10, 7);
     scene.add(directionalLight);
 
-    // Determine model URL from query params (default to a sample GLB if not provided)
     const params = new URLSearchParams(window.location.search);
     const modelUrl =
       params.get('fileUrl') ||
@@ -68,26 +63,22 @@ const ModelViewer: React.FC = () => {
     const ext = modelUrl.split('.').pop()?.toLowerCase();
     setLastUrl(modelUrl);
 
-    // reset error + show spinner
     setError(null);
     setIsLoading(true);
     setProgress(0);
 
-    // Shared progress handler for both loaders (produces 0..99 until success)
+    abortController.current?.abort();
+    abortController.current = new AbortController();
+
     const handleProgress = (e?: ProgressEvent<EventTarget>) => {
       let next: number | null = null;
-      if (
-        e &&
-        'loaded' in e &&
-        'total' in e &&
-        typeof (e as ProgressEvent<EventTarget>).loaded === 'number' &&
-        typeof (e as ProgressEvent<EventTarget>).total === 'number' &&
-        (e as ProgressEvent<EventTarget>).total > 0
-      ) {
-        const loaded = (e as ProgressEvent<EventTarget>).loaded;
-        const total = (e as ProgressEvent<EventTarget>).total;
-        const pct = (loaded / total) * 100;
-        if (Number.isFinite(pct)) next = Math.min(Math.round(pct), 99);
+      if (e && 'loaded' in e && 'total' in e) {
+        const loaded = (e as ProgressEvent).loaded;
+        const total = (e as ProgressEvent).total;
+        if (total > 0) {
+          const pct = (loaded / total) * 100;
+          if (Number.isFinite(pct)) next = Math.min(Math.round(pct), 99);
+        }
       }
       setProgress((prev) => {
         if (next !== null) return next;
@@ -96,32 +87,27 @@ const ModelViewer: React.FC = () => {
       });
     };
 
-    // Load model based on file extension
     if (ext === 'ply') {
-      const plyLoader = new PLYLoader();
-      plyLoader.load(
+      new PLYLoader().load(
         modelUrl,
         (geometry) => {
-          geometry.computeVertexNormals(); // ensure lighting works
+          geometry.computeVertexNormals();
           const material = new THREE.MeshStandardMaterial({ color: 0xcccccc });
           const mesh = new THREE.Mesh(geometry, material);
           scene.add(mesh);
-          // Adjust camera to fit the loaded model
+
           const box = new THREE.Box3().setFromObject(mesh);
           const sphere = box.getBoundingSphere(new THREE.Sphere());
           if (sphere) {
-            const center = sphere.center;
-            const radius = sphere.radius;
+            const { center, radius } = sphere;
             camera.position.set(center.x, center.y, center.z + radius * 2);
             camera.lookAt(center);
-            if (camera instanceof THREE.PerspectiveCamera) {
-              camera.updateProjectionMatrix();
-            }
+            camera.updateProjectionMatrix();
             controls.target.copy(center);
             controls.update();
           }
+
           setProgress(100);
-          // small delay so 100% is visible for a beat
           setTimeout(() => {
             setIsLoading(false);
             setProgress(null);
@@ -136,27 +122,23 @@ const ModelViewer: React.FC = () => {
         }
       );
     } else if (ext === 'gltf' || ext === 'glb') {
-      const gltfLoader = new GLTFLoader();
-      gltfLoader.load(
+      new GLTFLoader().load(
         modelUrl,
         (gltf) => {
           scene.add(gltf.scene);
-          // Adjust camera to fit the loaded model
+
           const box = new THREE.Box3().setFromObject(gltf.scene);
           const sphere = box.getBoundingSphere(new THREE.Sphere());
           if (sphere) {
-            const center = sphere.center;
-            const radius = sphere.radius;
+            const { center, radius } = sphere;
             camera.position.set(center.x, center.y, center.z + radius * 2);
             camera.lookAt(center);
-            if (camera instanceof THREE.PerspectiveCamera) {
-              camera.updateProjectionMatrix();
-            }
+            camera.updateProjectionMatrix();
             controls.target.copy(center);
             controls.update();
           }
+
           setProgress(100);
-          // small delay so 100% is visible for a beat
           setTimeout(() => {
             setIsLoading(false);
             setProgress(null);
@@ -179,10 +161,7 @@ const ModelViewer: React.FC = () => {
       setError(`Unsupported file type: ${ext ?? '(unknown)'}`);
     }
 
-    // Animation loop (renders the scene on each frame)
     let frameId: number;
-    const container = containerRef.current; // Capture the ref value
-
     const animate = () => {
       frameId = requestAnimationFrame(animate);
       controls.update();
@@ -190,7 +169,6 @@ const ModelViewer: React.FC = () => {
     };
     animate();
 
-    // Cleanup on unmount
     return () => {
       if (frameId) cancelAnimationFrame(frameId);
       renderer.dispose();
@@ -201,39 +179,51 @@ const ModelViewer: React.FC = () => {
     };
   }, [reloadKey]);
 
-  // Retry: re-run the effect by bumping the key
-
   const handleRetry = () => {
     setError(null);
     setReloadKey((k) => k + 1);
   };
 
-  // Dismiss: send bridge message (if in WKWebView) then hide banner
   const handleDismiss = () => {
-    const viewerHandler = (
-      window as Window & {
-        webkit?: {
-          messageHandlers?: {
-            viewer?: {
-              postMessage?: (msg: unknown) => void;
-            };
+    abortController.current?.abort();
+    interface WebkitWindow extends Window {
+      webkit?: {
+        messageHandlers?: {
+          viewer?: {
+            postMessage?: (msg: unknown) => void;
           };
         };
-      }
-    )?.webkit?.messageHandlers?.viewer;
-    try {
-      if (viewerHandler && typeof viewerHandler.postMessage === 'function') {
-        viewerHandler.postMessage({
-          type: 'viewerError',
-          error,
-          url: lastUrl || null,
-        });
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_) {
-      // no-op: fail silently if not in WKWebView
+      };
     }
+    const viewerHandler = (window as WebkitWindow).webkit?.messageHandlers
+      ?.viewer;
+    viewerHandler?.postMessage?.({
+      type: 'viewerError',
+      error,
+      url: lastUrl || null,
+    });
     setError(null);
+  };
+
+  const handleCancel = () => {
+    abortController.current?.abort();
+    setIsLoading(false);
+    setProgress(null);
+    interface WebkitWindow extends Window {
+      webkit?: {
+        messageHandlers?: {
+          viewer?: {
+            postMessage?: (msg: unknown) => void;
+          };
+        };
+      };
+    }
+    const viewerHandler = (window as WebkitWindow).webkit?.messageHandlers
+      ?.viewer;
+    viewerHandler?.postMessage?.({
+      type: 'viewerCanceled',
+      url: lastUrl || null,
+    });
   };
 
   const label =
@@ -263,7 +253,6 @@ const ModelViewer: React.FC = () => {
             <button
               type="button"
               className="error-banner__close"
-              aria-label="Dismiss error"
               onClick={handleDismiss}
             >
               ×
@@ -278,13 +267,17 @@ const ModelViewer: React.FC = () => {
             <>
               <div className="spinner-text">{label}%</div>
               <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ ['--progress-width' as string]: `${label}%` }}
-                />
+                <div className="progress-fill" style={{ width: `${label}%` }} />
               </div>
             </>
           )}
+          <button
+            type="button"
+            className="cancel-button"
+            onClick={handleCancel}
+          >
+            Cancel
+          </button>
         </div>
       )}
     </div>

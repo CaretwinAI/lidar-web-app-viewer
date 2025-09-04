@@ -13,22 +13,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Spinner overlay: positioned above the canvas inside the container */
 .spinner-overlay {
   position: absolute;
-  inset: 0; /* shorthand for top/right/bottom/left:0 */
+  inset: 0; /* shorthand for top/right/bottom/left: 0 */
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 12px; /* consistent spacing between spinner, % label, bar */
+  gap: 12px;
   padding: max(env(safe-area-inset-top), 0px)
     max(env(safe-area-inset-right), 0px) max(env(safe-area-inset-bottom), 0px)
     max(env(safe-area-inset-left), 0px);
   background: rgba(255, 255, 255, 0.8);
-  z-index: 999;
-  pointer-events: none; /* don’t block orbit controls when overlay flashes 100% briefly */
+  z-index: 999; /* above canvas, below error banner */
+  pointer-events: none; /* don’t block orbit controls after load */
 }
 
+/* Percentage label */
 .spinner-text {
   margin-top: 12px;
   font-size: clamp(12px, 1.6vmin, 16px);
@@ -53,20 +55,15 @@ body {
   transition: width 120ms linear;
 }
 
-/* Error banner (top of viewer container) */
+/* Error banner sits above spinner overlay */
 .error-banner {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px 12px;
-  background: #f44336; /* Material red 500 */
+  background: #f44336;
   color: #ffffff;
-  /*
-  text-align: center;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  */
   display: flex;
   align-items: center;
   gap: 12px;
@@ -88,20 +85,16 @@ body {
   align-items: center;
   gap: 8px;
 }
+
 .error-banner__retry {
   background: #ffffff;
-  color: #c62828; /* deep red text complements banner */
+  color: #c62828;
   border: none;
   border-radius: 6px;
   font-size: 14px;
   font-weight: 700;
-  padding: 8px 12px; /* good mobile tap target */
+  padding: 8px 12px;
   cursor: pointer;
-}
-.error-banner__retry:hover,
-.error-banner__retry:focus-visible {
-  filter: brightness(0.95);
-  outline: none;
 }
 
 .error-banner__close {
@@ -117,6 +110,7 @@ body {
   cursor: pointer;
 }
 
+/* Spinner wheel */
 .spinner {
   width: clamp(28px, 6vmin, 56px);
   height: clamp(28px, 6vmin, 56px);
