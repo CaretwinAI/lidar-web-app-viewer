@@ -3,8 +3,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-
-// adding meshable level "pop"
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { PMREMGenerator } from 'three/src/extras/PMREMGenerator.js';
 
@@ -27,36 +25,27 @@ const ModelViewer: React.FC = () => {
 
   useEffect(() => {
     if (!containerRef.current) return;
-
-    const container = containerRef.current; // Capture ref value
+    const container = containerRef.current;
 
     const scene = new THREE.Scene();
-
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
     camera.position.set(0, 0, 5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-
-    // after creating renderer:
     const pmrem = new PMREMGenerator(renderer);
     pmrem.compileEquirectangularShader();
 
-    // load once (outside the loader callbacks)
-    new RGBELoader()
-      .setPath('/env/') // host an .hdr in /public/env/
-      .load('studio_small_08_4k.hdr', (hdr) => {
-        const envMap = pmrem.fromEquirectangular(hdr).texture;
-        scene.environment = envMap; // ✅ reflections & subtle fill
-        hdr.dispose();
-        pmrem.dispose();
-      });
+    new RGBELoader().setPath('/env/').load('studio_small_08_4k.hdr', (hdr) => {
+      const envMap = pmrem.fromEquirectangular(hdr).texture;
+      scene.environment = envMap;
+      hdr.dispose();
+      pmrem.dispose();
+    });
 
     renderer.setSize(width, height, false);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-    // ✅ Color management & tonemapping to match Meshlab-ish output
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
@@ -65,8 +54,8 @@ const ModelViewer: React.FC = () => {
     hemi.position.set(0, 1, 0);
     scene.add(hemi);
 
-    renderer.domElement.style.display = 'block'; // avoid inline-canvas baseline gaps
-    containerRef.current.appendChild(renderer.domElement);
+    renderer.domElement.style.display = 'block';
+    container.appendChild(renderer.domElement);
 
     const onWindowResize = () => {
       if (!containerRef.current) return;
@@ -87,7 +76,6 @@ const ModelViewer: React.FC = () => {
     scene.add(directionalLight);
 
     const params = new URLSearchParams(window.location.search);
-    // 'https://raw.githubusercontent.com/kelvinwatson/glb-files/main/DamagedHelmet.glb';
     const modelUrl =
       params.get('fileUrl') ||
       'https://raw.githubusercontent.com/eapostol/lidar-web-app-viewer/main/sample/8_3_2025.ply';
@@ -119,78 +107,44 @@ const ModelViewer: React.FC = () => {
     };
 
     if (ext === 'ply') {
-      /*
       new PLYLoader().load(
         modelUrl,
         (geometry) => {
-          geometry.computeVertexNormals();
-          const material = new THREE.MeshStandardMaterial({ color: 0xcccccc });
-          const mesh = new THREE.Mesh(geometry, material);
-          scene.add(mesh);
-
-          const box = new THREE.Box3().setFromObject(mesh);
-          const sphere = box.getBoundingSphere(new THREE.Sphere());
-          if (sphere) {
-            const { center, radius } = sphere;
-            camera.position.set(center.x, center.y, center.z + radius * 2);
-            camera.lookAt(center);
-            camera.updateProjectionMatrix();
-            controls.target.copy(center);
-            controls.update();
-          }
-
-          setProgress(100);
-          setTimeout(() => {
-            setIsLoading(false);
-            setProgress(null);
-          }, 120);
-        },
-        handleProgress,
-        (err) => {
-          console.error('Error loading PLY model:', err);
-          setIsLoading(false);
-          setProgress(null);
-          setError('Failed to load model (PLY). Please check the URL or file.');
-        }
-      );
-*/
-
-      new PLYLoader().load(
-        modelUrl,
-        (geometry) => {
-          // If normals are missing, compute them; otherwise keep as-is
-          if (!geometry.getAttribute('normal')) {
-            geometry.computeVertexNormals();
-          }
-
-          // Check for per-vertex colors in the PLY
           const colorAttr = geometry.getAttribute('color') as
             | THREE.BufferAttribute
             | undefined;
-
-          // If colors are 0–255 (Uint8), normalize so they render correctly
           if (colorAttr && colorAttr.normalized !== true) {
-            colorAttr.normalized = true; // Three interprets normalized Uint8 as 0..1 sRGB
+            colorAttr.normalized = true;
           }
 
-          // Choose material: vertex-colored if available; otherwise neutral gray
-          const material = new THREE.MeshStandardMaterial({
-            vertexColors: !!colorAttr, // ✅ this is the key
-            color: colorAttr ? undefined : 0xcccccc,
-            roughness: 0.8,
-            metalness: 0.05,
-            // side: THREE.DoubleSide, // uncomment if your mesh is single-sided and appears dark from some angles
-          });
+          let object: THREE.Object3D;
+          if (!geometry.index) {
+            const pointMat = new THREE.PointsMaterial({
+              size: 0.002,
+              vertexColors: !!colorAttr,
+              color: colorAttr ? undefined : 0xffffff,
+            });
+            object = new THREE.Points(geometry, pointMat);
+            console.log('Loaded PLY as point cloud');
+          } else {
+            if (!geometry.getAttribute('normal')) {
+              geometry.computeVertexNormals();
+            }
+            const meshMat = new THREE.MeshStandardMaterial({
+              vertexColors: !!colorAttr,
+              color: colorAttr ? undefined : 0xcccccc,
+              roughness: 0.8,
+              metalness: 0.05,
+            });
+            object = new THREE.Mesh(geometry, meshMat);
+            console.log('Loaded PLY as mesh with faces');
+          }
 
-          const mesh = new THREE.Mesh(geometry, material);
-          scene.add(mesh);
-
-          // Frame the model
-          const box = new THREE.Box3().setFromObject(mesh);
+          scene.add(object);
+          const box = new THREE.Box3().setFromObject(object);
           const sphere = box.getBoundingSphere(new THREE.Sphere());
           if (sphere) {
             const { center, radius } = sphere;
-            // Pull back a bit more so the model is comfortably framed
             const k = 2.2;
             camera.position.set(center.x, center.y, center.z + radius * k);
             camera.lookAt(center);
@@ -218,7 +172,6 @@ const ModelViewer: React.FC = () => {
         modelUrl,
         (gltf) => {
           scene.add(gltf.scene);
-
           const box = new THREE.Box3().setFromObject(gltf.scene);
           const sphere = box.getBoundingSphere(new THREE.Sphere());
           if (sphere) {
@@ -278,7 +231,7 @@ const ModelViewer: React.FC = () => {
 
   const handleDismiss = () => {
     abortController.current?.abort();
-    interface WebkitWindow extends Window {
+    interface ViewerWindow extends Window {
       webkit?: {
         messageHandlers?: {
           viewer?: {
@@ -287,7 +240,7 @@ const ModelViewer: React.FC = () => {
         };
       };
     }
-    const viewerHandler = (window as WebkitWindow).webkit?.messageHandlers
+    const viewerHandler = (window as ViewerWindow).webkit?.messageHandlers
       ?.viewer;
     viewerHandler?.postMessage?.({
       type: 'viewerError',
@@ -301,17 +254,7 @@ const ModelViewer: React.FC = () => {
     abortController.current?.abort();
     setIsLoading(false);
     setProgress(null);
-    interface WebkitWindow extends Window {
-      webkit?: {
-        messageHandlers?: {
-          viewer?: {
-            postMessage?: (msg: unknown) => void;
-          };
-        };
-      };
-    }
-    const viewerHandler = (window as WebkitWindow).webkit?.messageHandlers
-      ?.viewer;
+    const viewerHandler = (window as any).webkit?.messageHandlers?.viewer;
     viewerHandler?.postMessage?.({
       type: 'viewerCanceled',
       url: lastUrl || null,
