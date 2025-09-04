@@ -3,6 +3,11 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+
+// adding meshable level "pop"
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { PMREMGenerator } from 'three/src/extras/PMREMGenerator.js';
+
 import './ModelViewer.css';
 
 const ModelViewer: React.FC = () => {
@@ -33,8 +38,36 @@ const ModelViewer: React.FC = () => {
     camera.position.set(0, 0, 5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
+
+    // after creating renderer:
+    const pmrem = new PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+
+    // load once (outside the loader callbacks)
+    new RGBELoader()
+      .setPath('/env/') // host an .hdr in /public/env/
+      .load('studio_small_08_4k.hdr', (hdr) => {
+        const envMap = pmrem.fromEquirectangular(hdr).texture;
+        scene.environment = envMap; // ✅ reflections & subtle fill
+        hdr.dispose();
+        pmrem.dispose();
+      });
+
     renderer.setSize(width, height, false);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    // ✅ Color management & tonemapping to match Meshlab-ish output
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+
+    // Optional: physically correct light falloff (usually looks better)
+    renderer.physicallyCorrectLights = true;
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+    hemi.position.set(0, 1, 0);
+    scene.add(hemi);
+
     renderer.domElement.style.display = 'block'; // avoid inline-canvas baseline gaps
     containerRef.current.appendChild(renderer.domElement);
 
@@ -89,6 +122,7 @@ const ModelViewer: React.FC = () => {
     };
 
     if (ext === 'ply') {
+      /*
       new PLYLoader().load(
         modelUrl,
         (geometry) => {
@@ -102,6 +136,66 @@ const ModelViewer: React.FC = () => {
           if (sphere) {
             const { center, radius } = sphere;
             camera.position.set(center.x, center.y, center.z + radius * 2);
+            camera.lookAt(center);
+            camera.updateProjectionMatrix();
+            controls.target.copy(center);
+            controls.update();
+          }
+
+          setProgress(100);
+          setTimeout(() => {
+            setIsLoading(false);
+            setProgress(null);
+          }, 120);
+        },
+        handleProgress,
+        (err) => {
+          console.error('Error loading PLY model:', err);
+          setIsLoading(false);
+          setProgress(null);
+          setError('Failed to load model (PLY). Please check the URL or file.');
+        }
+      );
+*/
+
+      new PLYLoader().load(
+        modelUrl,
+        (geometry) => {
+          // If normals are missing, compute them; otherwise keep as-is
+          if (!geometry.getAttribute('normal')) {
+            geometry.computeVertexNormals();
+          }
+
+          // Check for per-vertex colors in the PLY
+          const colorAttr = geometry.getAttribute('color') as
+            | THREE.BufferAttribute
+            | undefined;
+
+          // If colors are 0–255 (Uint8), normalize so they render correctly
+          if (colorAttr && colorAttr.normalized !== true) {
+            colorAttr.normalized = true; // Three interprets normalized Uint8 as 0..1 sRGB
+          }
+
+          // Choose material: vertex-colored if available; otherwise neutral gray
+          const material = new THREE.MeshStandardMaterial({
+            vertexColors: !!colorAttr, // ✅ this is the key
+            color: colorAttr ? undefined : 0xcccccc,
+            roughness: 0.8,
+            metalness: 0.05,
+            // side: THREE.DoubleSide, // uncomment if your mesh is single-sided and appears dark from some angles
+          });
+
+          const mesh = new THREE.Mesh(geometry, material);
+          scene.add(mesh);
+
+          // Frame the model
+          const box = new THREE.Box3().setFromObject(mesh);
+          const sphere = box.getBoundingSphere(new THREE.Sphere());
+          if (sphere) {
+            const { center, radius } = sphere;
+            // Pull back a bit more so the model is comfortably framed
+            const k = 2.2;
+            camera.position.set(center.x, center.y, center.z + radius * k);
             camera.lookAt(center);
             camera.updateProjectionMatrix();
             controls.target.copy(center);
