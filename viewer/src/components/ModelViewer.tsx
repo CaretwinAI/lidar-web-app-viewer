@@ -57,9 +57,10 @@ const ModelViewer: React.FC = () => {
     scene.add(directionalLight);
 
     const params = new URLSearchParams(window.location.search);
+    // 'https://raw.githubusercontent.com/kelvinwatson/glb-files/main/DamagedHelmet.glb';
     const modelUrl =
       params.get('fileUrl') ||
-      'https://raw.githubusercontent.com/kelvinwatson/glb-files/main/DamagedHelmet.glb';
+      'https://raw.githubusercontent.com/eapostol/lidar-web-app-viewer/main/sample/8_3_2025.ply';
     const ext = modelUrl.split('.').pop()?.toLowerCase();
     setLastUrl(modelUrl);
 
