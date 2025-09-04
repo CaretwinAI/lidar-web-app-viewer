@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: lidar-web-app-viewer
+    env: node
+    plan: free
+    autoDeploy: true
+    region: oregon
+    healthCheckPath: /
+    buildCommand: |
+      cd viewer
+      npm ci
+      npm run build
+    startCommand: |
+      cd viewer
+      node server.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      # If you later need runtime config for the viewer, add them here, e.g.:
+      # - key: VIEWER_PUBLIC_BASE
+      #   value: https://your-custom-domain-or-render-url
