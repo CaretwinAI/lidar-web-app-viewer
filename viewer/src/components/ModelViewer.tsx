@@ -8,6 +8,38 @@ import { PMREMGenerator } from 'three/src/extras/PMREMGenerator.js';
 
 import './ModelViewer.css';
 
+// Types for WebKit bridge
+interface ViewerMessage {
+  type:
+    | 'viewerReady'
+    | 'viewerLoadingStart'
+    | 'viewerProgress'
+    | 'viewerLoaded'
+    | 'viewerError'
+    | 'viewerCanceled';
+  url?: string | null;
+  error?: string;
+  loaded?: number;
+  total?: number;
+  pct?: number | null;
+}
+
+interface ViewerWindow extends Window {
+  webkit?: {
+    messageHandlers?: {
+      viewer?: {
+        postMessage?: (msg: ViewerMessage) => void;
+      };
+    };
+  };
+}
+
+const postViewerMessage = (msg: ViewerMessage) => {
+  const viewerHandler = (window as ViewerWindow).webkit?.messageHandlers
+    ?.viewer;
+  viewerHandler?.postMessage?.(msg);
+};
+
 const ModelViewer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -16,6 +48,7 @@ const ModelViewer: React.FC = () => {
   const [reloadKey, setReloadKey] = useState(0);
   const [lastUrl, setLastUrl] = useState<string>('');
   const abortController = useRef<AbortController | null>(null);
+  const currentObjectRef = useRef<THREE.Object3D | null>(null);
 
   const ModelViewerStyleObj: React.CSSProperties = {
     width: '100%',
@@ -89,6 +122,21 @@ const ModelViewer: React.FC = () => {
     abortController.current?.abort();
     abortController.current = new AbortController();
 
+    // Cleanup old object
+    if (currentObjectRef.current) {
+      scene.remove(currentObjectRef.current);
+      currentObjectRef.current.traverse((child) => {
+        if ((child as THREE.Mesh).geometry) {
+          (child as THREE.Mesh).geometry.dispose();
+        }
+        if ((child as THREE.Mesh).material) {
+          const mat = (child as THREE.Mesh).material as THREE.Material;
+          mat.dispose();
+        }
+      });
+      currentObjectRef.current = null;
+    }
+
     const handleProgress = (e?: ProgressEvent<EventTarget>) => {
       let next: number | null = null;
       if (e && 'loaded' in e && 'total' in e) {
@@ -103,6 +151,19 @@ const ModelViewer: React.FC = () => {
         if (next !== null) return next;
         const fallback = prev == null ? 10 : Math.min(prev + 5, 95);
         return Number.isFinite(fallback) ? fallback : 0;
+      });
+      postViewerMessage({ type: 'viewerProgress', url: modelUrl, pct: next });
+    };
+
+    const handleError = (err: unknown, type: string) => {
+      console.error(`Error loading ${type} model:`, err);
+      setIsLoading(false);
+      setProgress(null);
+      setError(`Failed to load model (${type}). Please check the URL or file.`);
+      postViewerMessage({
+        type: 'viewerError',
+        url: modelUrl,
+        error: String(err),
       });
     };
 
@@ -140,6 +201,7 @@ const ModelViewer: React.FC = () => {
             console.log('Loaded PLY as mesh with faces');
           }
 
+          currentObjectRef.current = object;
           scene.add(object);
           const box = new THREE.Box3().setFromObject(object);
           const sphere = box.getBoundingSphere(new THREE.Sphere());
@@ -158,19 +220,16 @@ const ModelViewer: React.FC = () => {
             setIsLoading(false);
             setProgress(null);
           }, 120);
+          postViewerMessage({ type: 'viewerLoaded', url: modelUrl });
         },
         handleProgress,
-        (err) => {
-          console.error('Error loading PLY model:', err);
-          setIsLoading(false);
-          setProgress(null);
-          setError('Failed to load model (PLY). Please check the URL or file.');
-        }
+        (err) => handleError(err, 'PLY')
       );
     } else if (ext === 'gltf' || ext === 'glb') {
       new GLTFLoader().load(
         modelUrl,
         (gltf) => {
+          currentObjectRef.current = gltf.scene;
           scene.add(gltf.scene);
           const box = new THREE.Box3().setFromObject(gltf.scene);
           const sphere = box.getBoundingSphere(new THREE.Sphere());
@@ -188,22 +247,21 @@ const ModelViewer: React.FC = () => {
             setIsLoading(false);
             setProgress(null);
           }, 100);
+          postViewerMessage({ type: 'viewerLoaded', url: modelUrl });
         },
         handleProgress,
-        (err) => {
-          console.error('Error loading GLTF model:', err);
-          setIsLoading(false);
-          setProgress(null);
-          setError(
-            'Failed to load model (GLB/GLTF). Please check the URL or file.'
-          );
-        }
+        (err) => handleError(err, 'GLB/GLTF')
       );
     } else {
       console.error('Unsupported file extension:', ext);
       setIsLoading(false);
       setProgress(null);
       setError(`Unsupported file type: ${ext ?? '(unknown)'}`);
+      postViewerMessage({
+        type: 'viewerError',
+        url: modelUrl,
+        error: 'Unsupported file type',
+      });
     }
 
     let frameId: number;
@@ -231,21 +289,10 @@ const ModelViewer: React.FC = () => {
 
   const handleDismiss = () => {
     abortController.current?.abort();
-    interface ViewerWindow extends Window {
-      webkit?: {
-        messageHandlers?: {
-          viewer?: {
-            postMessage?: (msg: unknown) => void;
-          };
-        };
-      };
-    }
-    const viewerHandler = (window as ViewerWindow).webkit?.messageHandlers
-      ?.viewer;
-    viewerHandler?.postMessage?.({
+    postViewerMessage({
       type: 'viewerError',
-      error,
       url: lastUrl || null,
+      error: error || 'Dismissed',
     });
     setError(null);
   };
@@ -254,11 +301,7 @@ const ModelViewer: React.FC = () => {
     abortController.current?.abort();
     setIsLoading(false);
     setProgress(null);
-    const viewerHandler = (window as any).webkit?.messageHandlers?.viewer;
-    viewerHandler?.postMessage?.({
-      type: 'viewerCanceled',
-      url: lastUrl || null,
-    });
+    postViewerMessage({ type: 'viewerCanceled', url: lastUrl || null });
   };
 
   const label =

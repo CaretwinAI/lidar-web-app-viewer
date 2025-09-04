@@ -30,3 +30,108 @@
 .cancel-button:hover {
   background: #c9302c;
 }
+
+/* === Metadata overlay === */
+.mv-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 12px;
+  pointer-events: none; /* allow orbit controls through */
+  z-index: 2;
+}
+
+.mv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.mv-name {
+  font-size: 14px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.mv-close {
+  pointer-events: auto;
+  font-size: 13px;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+}
+
+.mv-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  pointer-events: auto;
+}
+
+.mv-meta-item {
+  background: rgba(0, 0, 0, 0.35);
+  color: #ddd;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.mv-meta-key {
+  opacity: 0.8;
+  margin-right: 4px;
+}
+
+.mv-progress {
+  margin-top: 8px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.mv-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  width: 0%;
+  transition: width 0.2s ease;
+}
+
+.mv-pct {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.mv-error {
+  margin-top: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffdede;
+  padding: 10px;
+  border-radius: 8px;
+  pointer-events: auto;
+}
+
+.mv-error-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
