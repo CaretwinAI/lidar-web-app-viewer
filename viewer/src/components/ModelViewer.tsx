@@ -61,9 +61,6 @@ const ModelViewer: React.FC = () => {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
 
-    // Optional: physically correct light falloff (usually looks better)
-    renderer.physicallyCorrectLights = true;
-
     const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
     hemi.position.set(0, 1, 0);
     scene.add(hemi);
