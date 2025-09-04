@@ -26,8 +26,9 @@ app.use(
     })
 );
 
-// SPA fallback (hash or history routing both supported)
-app.get("*", (_req, res) => {
+// modified for Express 5.x
+// SPA fallback: send index.html for any non-asset GET
+app.get(/.*/, (_req, res) => {
     res.sendFile(indexFile);
 });
 
